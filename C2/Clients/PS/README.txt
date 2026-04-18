@@ -1,0 +1,1 @@
+powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File client.ps1
