@@ -1,0 +1,4 @@
+D:\REPO\MWI_FINAL\C2\Clients\CS\C2_Client\bin\Release\C2_Client.dll
+D:\REPO\MWI_FINAL\C2\Clients\CS\C2_Client\obj\Release\C2_Client.csproj.AssemblyReference.cache
+D:\REPO\MWI_FINAL\C2\Clients\CS\C2_Client\obj\Release\C2_Client.csproj.CoreCompileInputs.cache
+D:\REPO\MWI_FINAL\C2\Clients\CS\C2_Client\obj\Release\C2_Client.dll
