@@ -11,9 +11,6 @@
     },
     {
       "AbsoluteMoniker": "D:0:0:{00000000-0000-0000-0000-000000000000}|\u003CSolution\u003E|ConsoleApp1||{04B8AB82-A572-4FEF-95CE-5222444B6B64}|"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{C4B9395B-A1FC-4A3F-A568-BA33D980A545}|..\\ConsoleApp1\\ConsoleApp1.csproj|d:\\repo\\mwi_final\\c2\\clients\\cs\\consoleapp1\\||{B270807C-D8C6-49EB-8EBE-8E8D566637A1}|5e9a8ac2-4f34-4521-858f-4c248ba31532"
     }
   ],
   "DocumentGroupContainers": [
@@ -34,8 +31,7 @@
               "ToolTip": "D:\\REPO\\MWI_FINAL\\C2\\Clients\\CS\\ConsoleApp1\\ConsoleApp1.csproj",
               "RelativeToolTip": "..\\ConsoleApp1\\ConsoleApp1.csproj",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
-              "WhenOpened": "2026-04-18T23:01:22.376Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-04-18T23:01:22.376Z"
             },
             {
               "$type": "Document",
@@ -45,7 +41,7 @@
               "RelativeDocumentMoniker": "Class1.cs",
               "ToolTip": "D:\\REPO\\MWI_FINAL\\C2\\Clients\\CS\\C2_Client\\Class1.cs",
               "RelativeToolTip": "Class1.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAYAAAAXAAAAAAAAAA==",
+              "ViewState": "AgIAAFkAAAAAAAAAAAAuwAkAAAAFAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-04-18T22:50:47.397Z",
               "EditorCaption": ""
@@ -58,7 +54,7 @@
               "RelativeDocumentMoniker": "..\\ConsoleApp1\\Program.cs",
               "ToolTip": "D:\\REPO\\MWI_FINAL\\C2\\Clients\\CS\\ConsoleApp1\\Program.cs",
               "RelativeToolTip": "..\\ConsoleApp1\\Program.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAAAEAAAAAAAAAA==",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAbAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-04-18T22:55:59.817Z",
               "EditorCaption": ""
