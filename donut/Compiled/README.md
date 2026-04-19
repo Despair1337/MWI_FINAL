@@ -1,3 +1,11 @@
+.\donut.exe -i C2_Client.dll -c TestClass -m RunProcess -p "notepad.exe calc.exe"
+.\donut.exe -i C2_Client.dll -c TestClass -m RunProcess -p "notepad.exe calc.exe" -f 2 -o payload.txt
+
+
+
+
+
+
 [![Issues](https://img.shields.io/github/issues/thewover/donut)](https://github.com/TheWover/donut/issues)
 [![Contributors](https://img.shields.io/github/contributors/thewover/donut)](https://github.com/TheWover/donut/graphs/contributors)
 [![Stars](https://img.shields.io/github/stars/thewover/donut)](https://github.com/TheWover/donut/stargazers)
