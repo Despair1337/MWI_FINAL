@@ -1,2 +1,0 @@
-D:\REPO\MWI_FINAL\C2\Clients\CS\ConsoleApp1\obj\Release\ConsoleApp1.csproj.AssemblyReference.cache
-D:\REPO\MWI_FINAL\C2\Clients\CS\ConsoleApp1\obj\Release\ConsoleApp1.csproj.CoreCompileInputs.cache
