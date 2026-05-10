@@ -1,5 +1,5 @@
-.\donut.exe -i C2_Client_4.dll -c Runner -m Start -p "test"
-.\donut.exe -i C2_Client_4.dll -c Runner -m Start -p "test" -f 2 -o payload.txt
+.\donut.exe -i C2_Client.dll -c Runner -m Start -p "test"
+.\donut.exe -i C2_Client.dll -c Runner -m Start -p "test" -f 2 -o payload.txt
 
 
 
