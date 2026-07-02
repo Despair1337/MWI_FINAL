@@ -1,10 +1,50 @@
+# Зависимости
 import os
 import uuid
 import time
 import base64
-from datetime import datetime
-from flask import Flask, request, jsonify, render_template_string, send_file
+import io
 import tempfile
+import pickle
+import traceback
+
+from flask import Flask, request, jsonify, render_template_string, send_file
+
+# Google API зависимости для GDrive uploader
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+from google.oauth2.credentials import Credentials
+
+# Загрузка сенситив штук с pythonanywhere
+def load_from_txt(filename):
+    try:
+        # Указываем полный путь к файлу
+        key_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), f'{filename}.txt')
+        with open(key_path, 'r') as f:
+            return f.read().strip() # .strip() уберет случайные пробелы или перенос строки
+    except Exception as e:
+        print(f"[!] Error loading secret key: {e}")
+        return "fallback_key_if_file_missing"
+
+
+
+
+# ------------------------------------------------------------------------------------
+# PROPS
+# ------------------------------------------------------------------------------------
+
+# ID "корневой" папки GDrive в которой будут создаваться дочерние с файлами...
+SHARED_FOLDER_ID = load_from_txt('GDriveFolderID')
+# Ключ для запросов на сохранение
+SECRET_KEY = load_from_txt('GDriveRequestSecretKey')
+# Имя GDrive Auth pickle файла
+PICKLE_FILE_NAME = 'token.pickle'
+# ------------------------------------------------------------------------------------
+# PROPS
+# ------------------------------------------------------------------------------------
+
+
+
 
 app = Flask(__name__)
 
@@ -139,6 +179,78 @@ def api_download_file(task_id):
     tmp.close()
     
     return send_file(tmp.name, as_attachment=True, download_name=filename)
+
+# ============================================================
+# GDrive uploader
+# ============================================================
+# --- Инициализация сервиса (один раз при старте) ---
+def get_drive_service():
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(base_dir, PICKLE_FILE_NAME)
+    with open(file_path, 'rb') as token:
+        creds = pickle.load(token)
+    return build('drive', 'v3', credentials=creds)
+
+drive_service = get_drive_service()
+
+def get_or_create_folder(folder_name):
+    # 1. Ищем папку, которая находится ВНУТРИ нашей SHARED_FOLDER_ID
+    query = (
+        f"name = '{folder_name}' and "
+        f"'{SHARED_FOLDER_ID}' in parents and "
+        f"mimeType = 'application/vnd.google-apps.folder' and "
+        f"trashed = false"
+    )
+    
+    results = drive_service.files().list(q=query, fields="files(id, name)").execute()
+    folders = results.get('files', [])
+    
+    if folders:
+        # print(f"GDRIVE FOLDER {folders[0]['id']}")
+        return folders[0]['id']
+    
+    # 2. Если не нашли, создаем папку внутри SHARED_FOLDER_ID
+    file_metadata = {
+        'name': folder_name,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [SHARED_FOLDER_ID] # Указываем родителя!
+    }
+    
+    folder = drive_service.files().create(body=file_metadata, fields='id').execute()
+    # print(f"GDRIVE FOLDER {folder.get('id')}")
+    return folder.get('id')
+
+# --- Эндпоинт ---
+@app.route('/gdrupload', methods=['POST'])
+def upload_file():
+    # Проверка ключа
+    if request.headers.get('X-Secret-Key') != SECRET_KEY:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    if 'file' not in request.files:
+        return jsonify({"error": "No file"}), 400
+    
+    file = request.files['file']
+    folder_name = request.form.get('folder', 'Default_Uploads')
+    mimetype = file.content_type or 'application/octet-stream'
+    
+    try:
+        # Логика поиска/создания папки (упрощенно)
+        folder_id = get_or_create_folder(folder_name)
+        
+        file_metadata = {'name': file.filename, 'parents': [folder_id]}
+        
+        # Загрузка
+        media = MediaIoBaseUpload(io.BytesIO(file.read()), mimetype=mimetype, resumable=False)
+        drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
+        
+        return jsonify({"message": "File uploaded successfully"}), 200
+        
+    except Exception:
+        # Выводим ошибку в логи сервера, а пользователю даем понятный ответ
+        error_details = traceback.format_exc()
+        print(f"CRITICAL ERROR:\n{error_details}")
+        return jsonify({"error": "Internal Server Error", "details": str(error_details)}), 500
 
 # ============================================================
 # Web UI

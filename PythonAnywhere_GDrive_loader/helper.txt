@@ -1,0 +1,5 @@
+что бы не было ошибок с pickle - в консоли выполнить
+pip3 install --user --upgrade google-auth
+
+если pickle токен перестал работать - обновить его скриптом auth_helper.py
+credentials.json можно взять из pythonanywhere
